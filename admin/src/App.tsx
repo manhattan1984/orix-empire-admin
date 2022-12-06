@@ -1,12 +1,21 @@
 import React, { useCallback } from "react";
 
-import { User as FirebaseUser } from "firebase/auth";
+import {
+  Auth,
+  createUserWithEmailAndPassword,
+  getAuth,
+  User as FirebaseUser,
+} from "firebase/auth";
 import {
   Authenticator,
   buildCollection,
+  buildEntityCallbacks,
   buildProperty,
   EntityReference,
   FirebaseCMSApp,
+  CMSView,
+  EnumValues,
+  singular,
 } from "@camberi/firecms";
 
 import "typeface-rubik";
@@ -23,57 +32,147 @@ const firebaseConfig = {
   measurementId: "G-LJNBGFC32E",
 };
 
-const locales = {
-  "en-US": "English (United States)",
-  "es-ES": "Spanish (Spain)",
-  "de-DE": "German",
-};
+const departments: EnumValues = [
+  { id: "pharmacy", label: "Pharmacy", color: "grayLight" },
+  { id: "nightclub", label: "Night Club", color: "redDark" },
+];
 
 type Drug = {
   name: string;
   price: number;
-  id: number;
+  // id: string;
+  stock: number;
 };
 
-const localeCollection = buildCollection({
-  path: "locale",
-  customId: locales,
-  name: "Locales",
-  singularName: "Locales",
-  properties: {
-    name: {
-      name: "Title",
-      validation: { required: true },
-      dataType: "string",
-    },
-    selectable: {
-      name: "Selectable",
-      description: "Is this locale selectable",
-      dataType: "boolean",
-    },
-    video: {
-      name: "Video",
-      dataType: "string",
-      validation: { required: false },
-      storage: {
-        storagePath: "videos",
-        acceptedFiles: ["video/*"],
-      },
-    },
+type OrderItem = {
+  name: string;
+  quantity: number;
+  price: number;
+};
+
+type Order = {
+  soldBy: string;
+  order: OrderItem[];
+};
+
+type User = {
+  firstName: string;
+  lastName: string;
+  password: string;
+  email: string;
+  department: string;
+  // id: string;
+};
+
+let auth: Auth;
+
+const createUser = (email: string, password: string) => {
+  createUserWithEmailAndPassword(auth, email, password)
+    .then((userCredential) => {
+      // Signed in
+      const user = userCredential.user;
+      return user.uid;
+      // ...
+    })
+    .catch((error) => {
+      const errorCode = error.code;
+      const errorMessage = error.message;
+      // ..
+    });
+};
+
+const usersCallback = buildEntityCallbacks({
+  onPreSave: ({ values, entityId }) => {
+    const email = values.email;
+    const password = values.password;
+
+    createUser(email, password);
+    return values;
   },
 });
 
-const drugsCollection = buildCollection<Drug>({
-  name: "Drugs",
-  singularName: "Drug",
-  path: "drugs",
+const usersCollection = buildCollection<User>({
+  name: "Users",
+  singularName: "User",
+  path: "users",
+  permissions: ({ authController }) => ({
+    edit: true,
+    create: true,
+    delete: true,
+  }),
+  customId: true,
+
+  properties: {
+    firstName: {
+      name: "First Name",
+      dataType: "string",
+      validation: { required: true },
+    },
+    lastName: {
+      name: "Last Name",
+      dataType: "string",
+      validation: { required: true },
+    },
+    email: {
+      name: "E-Mail",
+      dataType: "string",
+      validation: { required: true },
+    },
+    password: {
+      name: "Password",
+      dataType: "string",
+      validation: { required: true },
+    },
+    department: {
+      dataType: "string",
+      name: "Department",
+      enumValues: departments,
+      validation: { required: true },
+    },
+  },
+  callbacks: usersCallback,
+});
+
+const pharmacyOrdersCollection = buildCollection<Order>({
+  name: "Pharmacy Orders",
+  singularName: "Order",
+  path: "orixempire/pharmacy/orders",
   permissions: ({ authController }) => ({
     edit: true,
     create: true,
     // we have created the roles object in the navigation builder
-    delete: false,
+    delete: true,
   }),
-  subcollections: [localeCollection],
+  properties: {
+    soldBy: {
+      name: "Sold By",
+      dataType: "string",
+    },
+    order: {
+      name: "Order",
+      dataType: "array",
+      // of:
+    },
+  },
+});
+
+const productsCallback = buildEntityCallbacks({
+  onPreSave: ({ collection, path, entityId, values, status }) => {
+    values.id = entityId;
+    return values;
+  },
+});
+
+const pharmacyProductsCollection = buildCollection<Drug>({
+  name: "Pharmacy Products",
+  singularName: "Pharmacy",
+  path: "orixempire/pharmacy/products",
+  permissions: ({ authController }) => ({
+    edit: true,
+    create: true,
+    // we have created the roles object in the navigation builder
+    delete: true,
+  }),
   properties: {
     name: {
       name: "Name",
@@ -84,19 +183,17 @@ const drugsCollection = buildCollection<Drug>({
       name: "Price",
       validation: {
         required: true,
-        requiredMessage: "You must set a price between 0 and 1000",
-        min: 0,
-        max: 1000,
       },
-      description: "Price with range validation",
+      description: "Price",
       dataType: "number",
     },
-    id: {
-      name: "ID",
+    stock: {
+      name: "Stock",
       validation: { required: true },
       dataType: "number",
     },
   },
+  callbacks: productsCallback,
 });
 
 export default function App() {
@@ -117,12 +214,18 @@ export default function App() {
     []
   );
 
+  const firebaseInit = (config: Object) => {
+    auth = getAuth();
+  };
+
   return (
     <FirebaseCMSApp
-      name={"My Online Shop"}
+      name={"Orix Empire"}
       authentication={myAuthenticator}
-      collections={[drugsCollection]}
+      collections={[pharmacyProductsCollection, usersCollection]}
       firebaseConfig={firebaseConfig}
+      signInOptions={["google.com"]}
+      onFirebaseInit={firebaseInit}
     />
   );
 }

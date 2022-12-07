@@ -17,6 +17,7 @@
     "@mui/material": "^5",
     "@mui/x-date-pickers": "^5.0.0-beta.1",
     "firebase": "^9",
+    "firebase-admin": "^11.3.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router": "^6",

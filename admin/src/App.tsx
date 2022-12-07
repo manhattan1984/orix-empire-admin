@@ -16,10 +16,12 @@ import {
   CMSView,
   EnumValues,
   singular,
+  EntityOnSaveProps,
 } from "@camberi/firecms";
 
 import "typeface-rubik";
 import "@fontsource/ibm-plex-mono";
+import { getApp, initializeApp, FirebaseApp } from "firebase/app";
 
 // TODO: Replace with your config
 const firebaseConfig = {
@@ -33,11 +35,11 @@ const firebaseConfig = {
 };
 
 const departments: EnumValues = [
-  { id: "pharmacy", label: "Pharmacy", color: "grayLight" },
+  { id: "medical-shop", label: "Medical Shop", color: "grayLight" },
   { id: "nightclub", label: "Night Club", color: "redDark" },
 ];
 
-type Drug = {
+type Product = {
   name: string;
   price: number;
   // id: string;
@@ -64,30 +66,48 @@ type User = {
   // id: string;
 };
 
-let auth: Auth;
+let createUserApp: FirebaseApp;
 
-const createUser = (email: string, password: string) => {
-  createUserWithEmailAndPassword(auth, email, password)
-    .then((userCredential) => {
-      // Signed in
-      const user = userCredential.user;
-      return user.uid;
-      // ...
-    })
-    .catch((error) => {
-      const errorCode = error.code;
-      const errorMessage = error.message;
-      // ..
-    });
+// initializeApp({
+//   credential: applicationDefault(),
+// });
+// const firebaseInit = (config: object) => {
+//   initializeApp();
+// };
+
+const createUser = async (email: string, password: string) => {
+  try {
+    const currentUser = getAuth().currentUser;
+
+    const newUser = await createUserWithEmailAndPassword(
+      getAuth(),
+      email,
+      password
+    );
+    console.log("newUser", true);
+
+    getAuth().updateCurrentUser(currentUser);
+
+    return true;
+  } catch (e) {
+    console.log(e);
+  }
 };
-
 const usersCallback = buildEntityCallbacks({
   onPreSave: ({ values, entityId }) => {
-    const email = values.email;
-    const password = values.password;
+    // const email = values.email;
+    // const password = values.password;
 
-    createUser(email, password);
+    // createUser(email, password, entityId);
     return values;
+  },
+  onSaveSuccess: (props: EntityOnSaveProps<User>) => {
+    console.log(props);
+    const { collection } = props;
+    const { email, password } = props.values;
+    if (email && password) {
+      createUser(email, password);
+    }
   },
 });
 
@@ -133,29 +153,6 @@ const usersCollection = buildCollection<User>({
   callbacks: usersCallback,
 });
 
-const pharmacyOrdersCollection = buildCollection<Order>({
-  name: "Pharmacy Orders",
-  singularName: "Order",
-  path: "orixempire/pharmacy/orders",
-  permissions: ({ authController }) => ({
-    edit: true,
-    create: true,
-    // we have created the roles object in the navigation builder
-    delete: true,
-  }),
-  properties: {
-    soldBy: {
-      name: "Sold By",
-      dataType: "string",
-    },
-    order: {
-      name: "Order",
-      dataType: "array",
-      // of:
-    },
-  },
-});
-
 const productsCallback = buildEntityCallbacks({
   onPreSave: ({ collection, path, entityId, values, status }) => {
     values.id = entityId;
@@ -163,44 +160,48 @@ const productsCallback = buildEntityCallbacks({
   },
 });
 
-const pharmacyProductsCollection = buildCollection<Drug>({
-  name: "Pharmacy Products",
-  singularName: "Pharmacy",
-  path: "orixempire/pharmacy/products",
-  permissions: ({ authController }) => ({
-    edit: true,
-    create: true,
-    // we have created the roles object in the navigation builder
-    delete: true,
-  }),
-  properties: {
-    name: {
-      name: "Name",
-      validation: { required: true },
-      dataType: "string",
-    },
-    price: {
-      name: "Price",
-      validation: {
-        required: true,
+const departmentsList = ["medical-shop", "nightclub"];
+
+const getDepartmentsCollections = (department: string) => {
+  return buildCollection<Product>({
+    name: `${department} Products`,
+    singularName: `${department} Product`,
+    path: `orixempire/${department}/products`,
+    permissions: ({ authController }) => ({
+      edit: true,
+      create: true,
+      // we have created the roles object in the navigation builder
+      delete: true,
+    }),
+    properties: {
+      name: {
+        name: "Name",
+        validation: { required: true },
+        dataType: "string",
       },
-      description: "Price",
-      dataType: "number",
+      price: {
+        name: "Price",
+        validation: {
+          required: true,
+        },
+        description: "Price",
+        dataType: "number",
+      },
+      stock: {
+        name: "Stock",
+        validation: { required: true },
+        dataType: "number",
+      },
     },
-    stock: {
-      name: "Stock",
-      validation: { required: true },
-      dataType: "number",
-    },
-  },
-  callbacks: productsCallback,
-});
+    callbacks: productsCallback,
+  });
+};
 
 export default function App() {
   const myAuthenticator: Authenticator<FirebaseUser> = useCallback(
     async ({ user, authController }) => {
-      if (user?.email?.includes("flanders")) {
-        throw Error("Stupid Flanders!");
+      if (user?.email !== "orixempirex@gmail.com") {
+        throw Error("You're not allowed to access admin!");
       }
 
       console.log("Allowing access to", user?.email);
@@ -214,18 +215,17 @@ export default function App() {
     []
   );
 
-  const firebaseInit = (config: Object) => {
-    auth = getAuth();
-  };
-
   return (
     <FirebaseCMSApp
       name={"Orix Empire"}
       authentication={myAuthenticator}
-      collections={[pharmacyProductsCollection, usersCollection]}
+      collections={[
+        ...departmentsList.map(getDepartmentsCollections),
+        usersCollection,
+      ]}
       firebaseConfig={firebaseConfig}
-      signInOptions={["google.com"]}
-      onFirebaseInit={firebaseInit}
+      signInOptions={["google.com", "password"]}
+      // onFirebaseInit={firebaseInit}
     />
   );
 }

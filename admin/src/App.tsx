@@ -66,14 +66,6 @@ type User = {
   // id: string;
 };
 
-let createUserApp: FirebaseApp;
-
-// initializeApp({
-//   credential: applicationDefault(),
-// });
-// const firebaseInit = (config: object) => {
-//   initializeApp();
-// };
 
 const createUser = async (email: string, password: string) => {
   try {
@@ -224,7 +216,7 @@ export default function App() {
         usersCollection,
       ]}
       firebaseConfig={firebaseConfig}
-      signInOptions={["google.com", "password"]}
+      signInOptions={["password"]}
       // onFirebaseInit={firebaseInit}
     />
   );
